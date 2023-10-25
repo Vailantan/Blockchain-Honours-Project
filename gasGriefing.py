@@ -1,18 +1,10 @@
 import streamlit as st
 import requests
 import pandas as pd
-import random
 import joblib
-from tabulate import tabulate
+import json
 
-threshold  = 0.1
-def is_gas_griefing(row):
-    gas_cost = row['gas'] * row['gasPrice']
-    extra_gas = row['cumulativeGasUsed'] - gas_cost
-    if extra_gas > threshold * gas_cost or random.random() < 0.2:
-        return 1  # Set gas griefing to 1 with 20% probability
-    else:
-        return 0  # Keep gas griefing as 0
+
 
 def griefingAnalysis(address, n):
     url = "https://api.etherscan.io/api"
@@ -42,46 +34,52 @@ def griefingAnalysis(address, n):
     tx_df["hash"] = [data1["result"][i]["hash"] for i in range(len(data1["result"]))]
     tx_df["cumulativeGasUsed"] = [int(data1["result"][i]["cumulativeGasUsed"]) for i in range(len(data1["result"]))]
     tx_df["contractAddress"] = [data1["result"][i]["contractAddress"] for i in range(len(data1["result"]))]
-    tx_df['gas_griefing'] = tx_df.apply(is_gas_griefing, axis=1)
+    tx_df['gas_griefing'] = tx_df.apply(lambda row: 1 if row["gas"] * 0.984375 < row["gasUsed"] else 0, axis=1)
     total_gas_griefing_count = tx_df["gas_griefing"].sum()
     st.write("Total number of gas_griefed Transaction:", total_gas_griefing_count)
     gas_griefing_rows = tx_df[tx_df["gas_griefing"] == 1].head(n)
     st.write("First", n, "rows with gas_griefing")
     st.dataframe(gas_griefing_rows)
 
-
+def get_block_details(block_number):
+    list1 =[]
+    api_key = 'YourApiKeyToken'
+    base_url = 'https://api.etherscan.io/api?module=proxy&action=eth_getBlockByNumber'
+    block_num_hex = hex(block_number)
+    url = f'{base_url}&tag={block_num_hex}&boolean=true&apikey={api_key}'
+    
+    response = requests.get(url)
+    data = json.loads(response.text)
+    
+    result = data['result']
+    
+    gas = int(result['gasLimit'], 16)
+    gas_used = int(result['gasUsed'], 16)
+    
+    list1.append(gas)
+    list1.append(gas_used)
+    return list1
 
 def gasgriefingPrediction(block_number):
-  clf = joblib.load("svm_model.pkl")
-  tx_df = pd.read_csv("tx_df.csv")
-  block_df = tx_df[tx_df['blockNumber'] == block_number]
-  if not block_df.empty:
-      row = block_df.iloc[0]
-      gas = row['gas']
-      gasPrice = row['gasPrice']
-      gasUsed = row['gasUsed']
-      cumulativeGasUsed = row['cumulativeGasUsed']
-      st.write(f'Gas: {gas}')
-      st.write(f'Gas Price: {gasPrice}')
-      st.write(f'Gas Used: {gasUsed}')
-      st.write(f'Cumulative Gas Used: {cumulativeGasUsed}')
-  else:
-      print(f'No data found for block number {block_number}')
-  user_input = pd.DataFrame([[gas, gasPrice, gasUsed, cumulativeGasUsed]], columns=['gas', 'gasPrice', 'gasUsed', 'cumulativeGasUsed'])
+  clf = joblib.load("model.pkl")
+  list1 = get_block_details(block_number)
+  user_input = pd.DataFrame([[list1[0], list1[1]]], columns=['gas', 'gasUsed'])
   prediction = clf.predict(user_input)
+  st.write(f"Gas : {list1[0]}")
+  st.write(f"Gas Used : {list1[1]}")
   if (prediction[0]==0):
-    st.write("There is gas griefing ")
+    st.write("No gas griefing ")
   else:
-    st.write("No gas griefing")  
+    st.write("There is gas griefing")  
 
 
-st.title("Gas Griefing Analysis and Prediction")
+st.title("Gas Griefing Detection and Analysis")
 
 # Create a navigation sidebar
-navigation = st.sidebar.radio("Navigation", ["Home", "Gas Griefing Prediction", "Gas Griefing Analysis"])
+navigation = st.sidebar.radio("Navigation", ["Home", "Gas Griefing Detection", "Gas Griefing Analysis"])
 
 if navigation == "Home":
-    st.write("Welcome to Gas Griefing Analysis and Prediction")
+    st.write("Welcome to Gas Griefing Detection and Analysis")
     
     st.header("Team Members")
     st.write("1. Amey Bagwe - 9180")
@@ -92,9 +90,9 @@ if navigation == "Home":
     st.header("Mentor")
     st.write("Prof. Monali Shetty")
 
-elif navigation == "Gas Griefing Prediction":
+elif navigation == "Gas Griefing Detection":
     block_number = st.number_input("Enter block number", value=0)
-    if st.button("Predict Gas Griefing"):
+    if st.button("Detect Gas Griefing"):
         gasgriefingPrediction(block_number)
 
 elif navigation == "Gas Griefing Analysis":
