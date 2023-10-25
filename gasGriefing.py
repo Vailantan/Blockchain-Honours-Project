@@ -1,8 +1,8 @@
 import streamlit as st
 import requests
 import pandas as pd
+import joblib
 import json
-
 
 
 def griefingAnalysis(address, n):
@@ -60,7 +60,7 @@ def get_block_details(block_number):
     return list1
 
 def gasgriefingPrediction(block_number):
- 
+  clf = joblib.load("model.pkl")
   list1 = get_block_details(block_number)
   user_input = pd.DataFrame([[list1[0], list1[1]]], columns=['gas', 'gasUsed'])
   prediction = clf.predict(user_input)
